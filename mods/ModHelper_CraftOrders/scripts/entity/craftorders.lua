@@ -1,7 +1,7 @@
 --[[
 Modname: ModHelper_CraftOrders
 Author: Rinart73
-Version: 1.0.0 (0.17.1 - 0.18.2)
+Version: 1.0.1 (0.17.1 - 0.18.2)
 Description: Allows modders to create non-conflicting mods that add Orders to the Craft Orders Tab.
 ]]
 
@@ -135,6 +135,292 @@ function CraftOrders.updateCurrentOrderIcon()
     Entity():setValue("currentOrderIcon", aiActionIcons[CraftOrders.targetAction] or "")
 end
 
+-- Fixed default Callbacks
+
+function CraftOrders.onIdleButtonPressed()
+    if onClient() then
+        invokeServerFunction("onIdleButtonPressed")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        local ai = ShipAI()
+        ai:setIdle()
+        CraftOrders.setAIAction()
+    end
+end
+
+function CraftOrders.stopFlying()
+    if onClient() then
+        invokeServerFunction("stopFlying")
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        ShipAI():setPassive()
+        CraftOrders.setAIAction()
+    end
+end
+
+function CraftOrders.escortEntity(index)
+    if onClient() then
+        invokeServerFunction("escortEntity", index)
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        ShipAI():setEscort(Entity(index))
+        CraftOrders.setAIAction(CraftOrders.AIAction.Escort, index)
+    end
+end
+
+function CraftOrders.attackEntity(index)
+    if onClient() then
+        invokeServerFunction("attackEntity", index);
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        local ai = ShipAI()
+        ai:setAttack(Entity(index))
+        CraftOrders.setAIAction(CraftOrders.AIAction.Attack, index)
+    end
+end
+
+function CraftOrders.flyToPosition(pos)
+    if onClient() then
+        invokeServerFunction("flyToPosition", pos);
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        local ai = ShipAI()
+        ai:setFly(pos, 0)
+        CraftOrders.setAIAction(CraftOrders.AIAction.FlyToPosition, nil, pos)
+    end
+end
+
+function CraftOrders.flyThroughWormhole(index)
+    if onClient() then
+        invokeServerFunction("flyThroughWormhole", index);
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        local ship = Entity()
+        local target = Entity(index)
+
+        if target:hasComponent(ComponentType.Plan) then
+            -- gate
+            local entryPos
+            local flyThroughPos
+            local waypoints = {}
+
+            -- determine best direction for entering the gate
+            if dot(target.look, ship.translationf - target.translationf) > 0 then
+                entryPos = target.translationf + target.look * ship:getBoundingSphere().radius * 10
+                flyThroughPos = target.translationf - target.look * ship:getBoundingSphere().radius * 5
+            else
+                entryPos = target.translationf - target.look * ship:getBoundingSphere().radius * 10
+                flyThroughPos = target.translationf + target.look * ship:getBoundingSphere().radius * 5
+            end
+            table.insert(waypoints, entryPos)
+            table.insert(waypoints, flyThroughPos)
+
+            Entity():addScript("ai/flythroughwormhole.lua", unpack(waypoints))
+        else
+            -- wormhole
+            ShipAI():setFly(target.translationf, 0)
+        end
+
+        CraftOrders.setAIAction(CraftOrders.AIAction.FlyThroughWormhole, index)
+    end
+end
+
+if CraftOrders.guardPosition then -- 0.18.2+
+
+
+function CraftOrders.guardPosition(position)
+    if onClient() then
+        invokeServerFunction("guardPosition", position)
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        ShipAI():setGuard(position)
+        CraftOrders.setAIAction(CraftOrders.AIAction.Guard, nil, position)
+    end
+end
+
+function CraftOrders.attackEnemies()
+    if onClient() then
+        invokeServerFunction("attackEnemies")
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        ShipAI():setAggressive()
+        CraftOrders.setAIAction(CraftOrders.AIAction.Aggressive)
+    end
+end
+
+function CraftOrders.patrolSector()
+    if onClient() then
+        invokeServerFunction("patrolSector")
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/patrol.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Patrol)
+    end
+end
+
+function CraftOrders.mine()
+    if onClient() then
+        invokeServerFunction("mine")
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/mine.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Mine)
+    end
+end
+
+function CraftOrders.onSalvageButtonPressed()
+    if onClient() then
+        invokeServerFunction("salvage")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/salvage.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Salvage)
+    end
+end
+
+function CraftOrders.salvage()
+    if onClient() then
+        invokeServerFunction("salvage")
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/salvage.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Salvage)
+    end
+end
+
+
+else -- 0.17.1+
+
+
+function CraftOrders.onGuardButtonPressed()
+    if onClient() then
+        invokeServerFunction("onGuardButtonPressed")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        local pos = Entity().translationf
+        ShipAI():setGuard(pos)
+        CraftOrders.setAIAction(CraftOrders.AIAction.Guard, nil, pos)
+    end
+end
+
+function CraftOrders.onAttackEnemiesButtonPressed()
+    if onClient() then
+        invokeServerFunction("onAttackEnemiesButtonPressed")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        ShipAI():setAggressive()
+        CraftOrders.setAIAction(CraftOrders.AIAction.Aggressive)
+    end
+end
+
+function CraftOrders.onPatrolButtonPressed()
+    if onClient() then
+        invokeServerFunction("onPatrolButtonPressed")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/patrol.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Patrol)
+    end
+end
+
+function CraftOrders.onMineButtonPressed()
+    if onClient() then
+        invokeServerFunction("onMineButtonPressed")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/mine.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Mine)
+    end
+end
+
+function CraftOrders.onSalvageButtonPressed()
+    if onClient() then
+        invokeServerFunction("onSalvageButtonPressed")
+        ScriptUI():stopInteraction()
+        return
+    end
+
+    if CraftOrders.checkCaptain() then
+        CraftOrders.removeSpecialOrders()
+
+        Entity():addScript("ai/salvage.lua")
+        CraftOrders.setAIAction(CraftOrders.AIAction.Salvage)
+    end
+end
+
+
+end
+
 -- API
 
 CraftOrders.window = nil
@@ -186,11 +472,11 @@ function CraftOrders.checkCaptain()
     faction:sendChatMessage("", 1, "Your ship has no captain!"%_t)
 end
 
--- vanilla function, just not local
+-- upgraded vanilla function that now also removes ai scripts from mods
 function CraftOrders.removeSpecialOrders()
     local entity = Entity()
     for index, name in pairs(entity:getScripts()) do
-        if string.match(name, "data/scripts/entity/ai/") then
+        if string.match(name, "/scripts/entity/ai/") then
             entity:removeScript(index)
         end
     end
