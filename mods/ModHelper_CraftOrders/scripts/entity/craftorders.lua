@@ -1,14 +1,23 @@
---[[
-Modname: ModHelper_CraftOrders
-Author: Rinart73
-Version: 1.0.1 (0.17.1 - 0.18.2)
-Description: Allows modders to create non-conflicting mods that add Orders to the Craft Orders Tab.
-]]
+package.path = package.path .. ";mods/ModHelper_CraftOrders/?.lua"
 
 local format = string.format
-local function log(msg, ...)
-    print(format("[ERROR][ModHelper-CraftOrders]: "..msg, ...))
+
+
+local isLoaded, config = pcall(require, "config/ModHelper_CraftOrders")
+
+local Level = { Error = 1, Warn = 2, Info = 3, Debug = 4 }
+local logLevelLabel = { "ERROR", "WARN", "INFO", "DEBUG" }
+local function log(level, msg, ...)
+    if level > (config and config.logLevel or 3) then return end
+    print(format("[%s][%s]: "..msg, logLevelLabel[level], config.acronym, ...))
 end
+
+if not isLoaded then
+    local err = config
+    config = { acronym = "MH-CraftOrders", logLevel = 2 }
+    log(Level.Error, "Failed to load config: %s", err)
+end
+
 
 -- functions that will be executed at the start/end of 'initUI' so modders could modify elements
 local initUICallbacks = { before = {}, after = {} }
@@ -24,6 +33,39 @@ local aiActionIcons = {
   "data/textures/icons/pixel/mine.png",
   "data/textures/icons/pixel/scrapyard_thin.png"
 }
+
+--[[ Predefined functions ]]--
+local old_initialize = CraftOrders.initialize
+function CraftOrders.initialize()
+    if old_initialize then old_initialize() end
+    if onServer() then
+        Entity():registerCallback("onJump", "modhelper_onJump")
+    end
+end
+
+if onServer() then
+
+-- using update and not updateServer because in theory priority matters
+local old_update = CraftOrders.update
+function CraftOrders.update(timeStep)
+    if old_update then old_update(timeStep) end
+    
+    local entity = Entity()
+    -- check if player is in the ship because player onShipChanged callback doesn't fire if we enter a ship from a drone more than once
+    if not callingPlayer and entity.hasPilot and CraftOrders.targetAction ~= nil then
+       -- fake callingPlayer to use setAIAction
+        if entity.playerOwned then
+            callingPlayer = entity.factionIndex
+        elseif entity.allianceOwned then
+            callingPlayer = Alliance(entity.factionIndex).leader
+        end
+        log(Level.Debug, "Resetting entity AIAction because it's now piloted by player")
+        CraftOrders.setAIAction() -- reset CraftOrders.targetAction when player enters the ship
+        callingPlayer = nil
+    end
+end
+
+end
 
 function CraftOrders.initUI()
     for i = 1, #initUICallbacks.before do
@@ -43,7 +85,7 @@ function CraftOrders.initUI()
         end
     end
     if squareSpace > 36 then
-        log("Elements are taking too much space (%u)", squareSpace)
+        log(Level.Warn, "Elements are taking too much space (%u)", squareSpace)
     end
     -- sort
     local n = #sorted
@@ -114,7 +156,7 @@ function CraftOrders.initUI()
         elem = CraftOrders.Elements[i]
         if elem then
             if not elem.rect then
-                log("Element '%s' wasn't created because of lack of space", elem.title)
+                log(Level.Warn, "Element '%s' wasn't created because of lack of space", elem.title)
                 CraftOrders.Elements[i] = nil
             else
                 if elem.type == CraftOrders.ElementType.CheckBox then
@@ -131,11 +173,28 @@ function CraftOrders.initUI()
     end
 end
 
+--[[ Functions ]]--
+
 function CraftOrders.updateCurrentOrderIcon()
     Entity():setValue("currentOrderIcon", aiActionIcons[CraftOrders.targetAction] or "")
 end
 
--- Fixed default Callbacks
+function CraftOrders.modhelper_onJump(shipIndex, x, y)
+    if callingPlayer then return end
+
+    local entity = Entity()
+    -- fake callingPlayer to use setAIAction
+    if entity.playerOwned then
+        callingPlayer = entity.factionIndex
+    elseif entity.allianceOwned then
+        callingPlayer = Alliance(entity.factionIndex).leader
+    end
+    log(Level.Debug, "Resetting entity AIAction before it will jump out of the sector")
+    CraftOrders.setAIAction() -- reset CraftOrders.targetAction when player enters the ship
+    callingPlayer = nil
+end
+
+--[[ Fixed default Callbacks ]]--
 
 function CraftOrders.onIdleButtonPressed()
     if onClient() then
@@ -421,7 +480,7 @@ end
 
 end
 
--- API
+--[[ API ]]--
 
 CraftOrders.window = nil
 
@@ -523,7 +582,7 @@ end
 
 -- adds AIAction
 function CraftOrders.addAIAction(name, iconpath)
-    -- not using numeric index, because if mod that adds AIAction will be deleted afterwise, everything will shift
+    -- not using numeric index because otherwise if mod that adds AIAction will be deleted everything will shift
     CraftOrders.AIAction[name] = name
     aiActionIcons[name] = iconpath
 end
